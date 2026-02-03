@@ -1,0 +1,40 @@
+@Chude4.Api_HostAddress = https://localhost:7066
+
+### Register (tạo user + role Admin + age claim)
+POST {{Chude4.Api_HostAddress}}/auth/register
+Content-Type: application/json
+
+{
+  "email": "a@a.com",
+  "password": "123456",
+  "role": "Admin",
+  "age": 18
+}
+
+### Login (lấy JWT)
+POST {{Chude4.Api_HostAddress}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "a@a.com",
+  "password": "123456"
+}
+
+### Me (cần token)
+# @name login
+POST {{Chude4.Api_HostAddress}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "a@a.com",
+  "password": "123456"
+}
+
+@token = {{login.response.body.$.accessToken}}
+
+GET {{Chude4.Api_HostAddress}}/me
+Authorization: Bearer {{token}}
+
+### AdminOnly
+GET {{Chude4.Api_HostAddress}}/admin
+Authorization: Bearer {{token}}
