@@ -1,40 +1,80 @@
-@Chude4.Api_HostAddress = https://localhost:7066
+@Chude4.Api_HostAddress = https://localhost:7105
 
-### Register (tạo user + role Admin + age claim)
+# ==========================================================
+# Admin user flow (should pass /admin and /age18)
+# ==========================================================
+
+### (Admin) Register: user + role Admin + age=18
 POST {{Chude4.Api_HostAddress}}/auth/register
 Content-Type: application/json
 
 {
-  "email": "a@a.com",
+  "email": "admin@a.com",
   "password": "123456",
   "role": "Admin",
   "age": 18
 }
 
-### Login (lấy JWT)
+### (Admin) Login -> get JWT
+# @name admin_login
 POST {{Chude4.Api_HostAddress}}/auth/login
 Content-Type: application/json
 
 {
-  "email": "a@a.com",
+  "email": "admin@a.com",
   "password": "123456"
 }
 
-### Me (cần token)
-# @name login
-POST {{Chude4.Api_HostAddress}}/auth/login
-Content-Type: application/json
+@admin_token = {{admin_login.response.body.$.accessToken}}
 
-{
-  "email": "a@a.com",
-  "password": "123456"
-}
-
-@token = {{login.response.body.$.accessToken}}
-
+### (Admin) /me (200)
 GET {{Chude4.Api_HostAddress}}/me
-Authorization: Bearer {{token}}
+Authorization: Bearer {{admin_token}}
 
-### AdminOnly
+### (Admin) /admin (200)
 GET {{Chude4.Api_HostAddress}}/admin
-Authorization: Bearer {{token}}
+Authorization: Bearer {{admin_token}}
+
+### (Admin) /age18 (200)
+GET {{Chude4.Api_HostAddress}}/age18
+Authorization: Bearer {{admin_token}}
+
+
+# ==========================================================
+# Normal user flow (should fail /admin, and fail /age18 if age < 18)
+# ==========================================================
+
+### (User) Register: no role, age=17
+POST {{Chude4.Api_HostAddress}}/auth/register
+Content-Type: application/json
+
+{
+  "email": "user@a.com",
+  "password": "123456",
+  "role": null,
+  "age": 17
+}
+
+### (User) Login -> get JWT
+# @name user_login
+POST {{Chude4.Api_HostAddress}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "user@a.com",
+  "password": "123456"
+}
+
+@user_token = {{user_login.response.body.$.accessToken}}
+
+### (User) /me (200)
+GET {{Chude4.Api_HostAddress}}/me
+Authorization: Bearer {{user_token}}
+
+### (User) /admin (403 Forbidden)
+GET {{Chude4.Api_HostAddress}}/admin
+Authorization: Bearer {{user_token}}
+
+### (User) /age18 (403 Forbidden)
+GET {{Chude4.Api_HostAddress}}/age18
+Authorization: Bearer {{user_token}}

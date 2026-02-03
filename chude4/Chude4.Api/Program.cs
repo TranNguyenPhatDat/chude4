@@ -7,13 +7,51 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Controllers + Swagger
+// --------------------
+// Services
+// --------------------
+
 builder.Services.AddControllers();
+
+// Swagger (with JWT Bearer support)
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "Chude4 API",
+        Version = "v1",
+        Description = "Thực hành Authentication & Authorization với ASP.NET Core Identity + JWT",
+        Contact = new OpenApiContact { Name = "Chude4" }
+    });
+
+    // NOTE: EnableAnnotations() requires an extra package; omitted to keep the project minimal.
+
+    var scheme = new OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        In = ParameterLocation.Header,
+        Description = "Nhập JWT theo dạng: Bearer {token}",
+        Reference = new OpenApiReference
+        {
+            Type = ReferenceType.SecurityScheme,
+            Id = JwtBearerDefaults.AuthenticationScheme
+        }
+    };
+
+    c.AddSecurityDefinition(JwtBearerDefaults.AuthenticationScheme, scheme);
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        { scheme, Array.Empty<string>() }
+    });
+});
 
 // Db + Identity (SQLite)
 builder.Services.AddDbContext<AuthDbContext>(opt =>
@@ -22,11 +60,15 @@ builder.Services.AddDbContext<AuthDbContext>(opt =>
 builder.Services
     .AddIdentityCore<IdentityUser>(opt =>
     {
+        // Demo settings (đơn giản để thực hành)
         opt.Password.RequireNonAlphanumeric = false;
         opt.Password.RequireUppercase = false;
         opt.Password.RequireLowercase = false;
         opt.Password.RequireDigit = false;
         opt.Password.RequiredLength = 6;
+
+        // A bit nicer defaults
+        opt.User.RequireUniqueEmail = true;
     })
     .AddRoles<IdentityRole>()
     .AddEntityFrameworkStores<AuthDbContext>()
@@ -58,7 +100,13 @@ builder.Services
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("AdminOnly", p => p.RequireRole("Admin"));
-    options.AddPolicy("AtLeast18", p => p.RequireClaim("age", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30"));
+
+    // Proper numeric check for age >= 18
+    options.AddPolicy("AtLeast18", p => p.RequireAssertion(ctx =>
+    {
+        var ageValue = ctx.User.FindFirst("age")?.Value;
+        return int.TryParse(ageValue, out var age) && age >= 18;
+    }));
 });
 
 // CORS
@@ -75,6 +123,10 @@ builder.Services.AddCors(opt =>
 
 var app = builder.Build();
 
+// --------------------
+// App pipeline
+// --------------------
+
 // Auto-create DB (simple for practice)
 using (var scope = app.Services.CreateScope())
 {
@@ -85,7 +137,17 @@ using (var scope = app.Services.CreateScope())
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
-    app.UseSwaggerUI();
+    app.UseSwaggerUI(options =>
+    {
+        options.DocumentTitle = "Chude4 API Docs";
+        options.SwaggerEndpoint("/swagger/v1/swagger.json", "Chude4 API v1");
+
+        // UI tweaks (professional + convenient)
+        options.DisplayRequestDuration();
+        options.DocExpansion(Swashbuckle.AspNetCore.SwaggerUI.DocExpansion.None);
+        options.DefaultModelsExpandDepth(-1); // hide schema section by default
+        options.EnablePersistAuthorization(); // keep Bearer token on refresh
+    });
 }
 
 app.UseHttpsRedirection();
@@ -94,18 +156,23 @@ app.UseCors(CorsPolicyName);
 app.UseAuthentication();
 app.UseAuthorization();
 
-// ---- Minimal endpoints (ngắn gọn để thực hành) ----
+// --------------------
+// Minimal endpoints
+// --------------------
 
 app.MapPost("/auth/register", async (
     RegisterRequest req,
     UserManager<IdentityUser> userManager,
     RoleManager<IdentityRole> roleManager) =>
 {
+    if (string.IsNullOrWhiteSpace(req.Email) || string.IsNullOrWhiteSpace(req.Password))
+        return Results.BadRequest(new { message = "Email và Password là bắt buộc" });
+
     var user = new IdentityUser { UserName = req.Email, Email = req.Email };
     var result = await userManager.CreateAsync(user, req.Password);
     if (!result.Succeeded) return Results.BadRequest(result.Errors);
 
-    // Optional: assign role Admin if requested (for demo)
+    // Optional: assign role if requested (demo)
     if (!string.IsNullOrWhiteSpace(req.Role))
     {
         if (!await roleManager.RoleExistsAsync(req.Role))
@@ -118,7 +185,9 @@ app.MapPost("/auth/register", async (
         await userManager.AddClaimAsync(user, new Claim("age", req.Age.Value.ToString()));
 
     return Results.Ok(new { message = "Registered" });
-});
+})
+.Produces(StatusCodes.Status200OK)
+.Produces(StatusCodes.Status400BadRequest);
 
 app.MapPost("/auth/login", async (
     LoginRequest req,
@@ -139,9 +208,9 @@ app.MapPost("/auth/login", async (
     var tokenClaims = new List<Claim>
     {
         new(JwtRegisteredClaimNames.Sub, user.Id),
-        new(JwtRegisteredClaimNames.Email, user.Email ?? ""),
+        new(JwtRegisteredClaimNames.Email, user.Email ?? string.Empty),
         new(ClaimTypes.NameIdentifier, user.Id),
-        new(ClaimTypes.Name, user.UserName ?? "")
+        new(ClaimTypes.Name, user.UserName ?? string.Empty)
     };
 
     tokenClaims.AddRange(roles.Select(r => new Claim(ClaimTypes.Role, r)));
@@ -159,7 +228,9 @@ app.MapPost("/auth/login", async (
     });
 
     return Results.Ok(new { accessToken = tokenHandler.WriteToken(token) });
-});
+})
+.Produces(StatusCodes.Status200OK)
+.Produces(StatusCodes.Status401Unauthorized);
 
 app.MapGet("/me", (ClaimsPrincipal user) =>
 {
@@ -168,12 +239,13 @@ app.MapGet("/me", (ClaimsPrincipal user) =>
         name = user.Identity?.Name,
         claims = user.Claims.Select(c => new { c.Type, c.Value })
     });
-}).RequireAuthorization();
+})
+.RequireAuthorization();
 
 app.MapGet("/admin", () => Results.Ok("Only Admin can see this"))
    .RequireAuthorization("AdminOnly");
 
-app.MapGet("/age18", () => Results.Ok("Need age claim >= 18 (demo)"))
+app.MapGet("/age18", () => Results.Ok("Need age claim >= 18"))
    .RequireAuthorization("AtLeast18");
 
 app.MapControllers();
