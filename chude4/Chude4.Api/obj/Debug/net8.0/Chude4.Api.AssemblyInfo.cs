@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Chude4.Api")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+e6c82a9cc8106c60d3975d29e6dab2c3bb3e2645")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+b56bb4580cd47d978affff9c4b7e2593d03f5b3a")]
 [assembly: System.Reflection.AssemblyProductAttribute("Chude4.Api")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Chude4.Api")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
