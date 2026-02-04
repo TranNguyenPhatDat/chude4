@@ -232,6 +232,16 @@ app.MapPost("/auth/login", async (
 .Produces(StatusCodes.Status200OK)
 .Produces(StatusCodes.Status401Unauthorized);
 
+// 4) Logout (JWT is stateless; this just clears any server-side auth state if present)
+app.MapPost("/auth/logout", async (SignInManager<IdentityUser> signInManager) =>
+{
+    await signInManager.SignOutAsync();
+    return Results.Ok(new { message = "Logged out" });
+})
+.RequireAuthorization()
+.Produces(StatusCodes.Status200OK)
+.Produces(StatusCodes.Status401Unauthorized);
+
 app.MapGet("/me", (ClaimsPrincipal user) =>
 {
     return Results.Ok(new
